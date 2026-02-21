@@ -2,7 +2,7 @@
 
 A custom Python bridge that connects a **real Pixhawk flight controller** to **Gazebo Harmonic (gz-sim 8)** for hardware-in-the-loop simulation. The bridge also forwards MAVLink to QGroundControl over UDP, so you can monitor and command the vehicle.
 
-PX4's official Gazebo integration only supports SITL (simulated autopilot). This project enables true HITL — your real Pixhawk firmware thinks it's flying a real drone.
+PX4's official Gazebo integration only supports SITL (simulated autopilot). This project enables true HITL - your real Pixhawk firmware thinks it's flying a real drone.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ PX4's official Gazebo integration only supports SITL (simulated autopilot). This
 ## Requirements
 
 - Gazebo Harmonic (gz-sim 8)
-- PX4-Autopilot source (for x500 model files) — `~/DEV/PX4-Autopilot`
+- PX4-Autopilot source (for x500 model files) - `~/DEV/PX4-Autopilot`
 - Python 3 with gz-transport and gz-msgs bindings
 - pymavlink, pyserial
 - Pixhawk with PX4 firmware
@@ -54,13 +54,13 @@ python3 -m venv hitl_bridge_venv
 source hitl_bridge_venv/bin/activate
 pip install pymavlink pyserial
 
-# Terminal 1 — Start Gazebo
+# Terminal 1 - Start Gazebo
 ./run_hitl.sh gazebo
 
-# Terminal 2 — Start bridge (after drone appears in Gazebo)
+# Terminal 2 - Start bridge (after drone appears in Gazebo)
 ./run_hitl.sh bridge
 
-# Terminal 3 — Open QGroundControl (connects automatically via UDP)
+# Terminal 3 - Open QGroundControl (connects automatically via UDP)
 # Wait ~15-20s for EKF to converge, then arm and fly
 ```
 
@@ -76,7 +76,7 @@ pip install pymavlink pyserial
 
 | File | Description |
 |------|-------------|
-| `hitl_bridge.py` | The bridge — Gazebo <-> Pixhawk MAVLink <-> QGC UDP |
+| `hitl_bridge.py` | The bridge - Gazebo <-> Pixhawk MAVLink <-> QGC UDP |
 | `hitl_world.sdf` | Gazebo world with x500 quadcopter and sensors |
 | `run_hitl.sh` | Launcher script for Gazebo and bridge |
 | `diagnose_hitl.sh` | Pre-flight diagnostic checker |

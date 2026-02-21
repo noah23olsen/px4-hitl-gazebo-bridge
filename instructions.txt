@@ -1,0 +1,46 @@
+PX4 Setup Progress
+==================
+
+Tranche 1: Base Toolchain ✅ COMPLETE
+- Opened terminal with: arch -x86_64 /bin/zsh
+- Added ulimit to ~/.zshenv
+- Installed x86_64 Homebrew at /usr/local
+- Updated Command Line Tools
+- Installed px4-dev: /usr/local/bin/brew install px4-dev
+- Linked ARM compiler: /usr/local/bin/brew link --overwrite --force arm-gcc-bin@13
+- Installed Python packages: python3 -m pip install --user --break-system-packages pyserial empty toml numpy pandas jinja2 pyyaml pyros-genmsg packaging kconfiglib future jsonschema
+- Tested: arm-none-eabi-gcc --version ✅ (version 13.2.1)
+
+Tranche 2: Gazebo Classic - IN PROGRESS (background task b25ed99)
+- [x] brew install --cask temurin ✅
+- [x] brew install --cask xquartz ✅
+- [ ] brew install px4-sim-gazebo (INSTALLING - 50+ min elapsed, still downloading 400+ dependencies)
+- [ ] Test: gzserver --version
+
+Note: tbb@2020 steps skipped (formula deprecated, not needed with modern Gazebo)
+
+Tranche 3: PX4 Source - COMPLETE ✅
+- [x] cd ~/DEV ✅
+- [x] git clone --depth 1 https://github.com/PX4/PX4-Autopilot.git ✅
+- [x] cd PX4-Autopilot/Tools/setup ✅
+- [x] sh macos.sh ✅ (installed via ARM Homebrew)
+- [x] Installed Python packages for Python 3.14 ✅
+
+Tranche 4: First Build - IN PROGRESS
+- [ ] make px4_sitl_default (BUILDING NOW - 15-25 min)
+
+Notes:
+- Using ARM Homebrew (/opt/homebrew) for PX4 toolchain
+- ARM cross-compiler: arm-gcc-bin@13 version 13.2.1
+- Python 3.14 with all required packages installed
+
+Tranche 4: First Flight - NOT STARTED
+- [ ] cd ~/DEV/PX4-Autopilot
+- [ ] make px4_sitl gazebo-classic
+- [ ] Open QGroundControl
+- [ ] Takeoff test
+
+Tranche 5: Learn to Fly - NOT STARTED
+- [ ] Create waypoint missions
+- [ ] Try different vehicles
+- [ ] Practice flight modes

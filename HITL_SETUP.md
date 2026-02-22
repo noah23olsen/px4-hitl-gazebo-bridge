@@ -53,39 +53,41 @@ pip install pymavlink pyserial
 
 ## Files
 
-- `hitl_world.sdf` — Gazebo world: ground plane, sun, GPS origin (Zurich), x500 quadcopter with IMU/mag/baro/GPS sensors
+- `hitl_world.sdf` — Gazebo world: ground plane, sun, GPS origin (Zurich), x500 with FPV camera
+- `hitl_baylands.sdf` — Gazebo world: Baylands Park, California with coast water
+- `models/x500_hitl/` — x500 quadcopter model with FPV camera for HITL
 - `hitl_bridge.py` — Python bridge: Gazebo <-> Pixhawk MAVLink <-> QGC UDP
-- `run_hitl.sh` — Launcher script
+- `run_hitl.sh` — One-command launcher (kills stale processes, starts Gazebo + bridge + QGC)
+- `px4_hitl.params` — PX4 parameter backup for HITL configuration
 - `diagnose_hitl.sh` — Pre-flight diagnostic checker
 
 ## Running HITL
 
-### Terminal 1 — Gazebo
+### One Command (recommended)
 ```bash
-./run_hitl.sh gazebo
+./run_hitl.sh start           # default flat world
+./run_hitl.sh start baylands  # Baylands Park world
 ```
-Wait for the GUI to appear with the x500 drone visible and upright.
+This kills stale processes, launches Gazebo, starts the bridge, and opens QGC.
+Press Ctrl+C to stop everything.
 
-### Terminal 2 — Bridge
+### Separate Components
 ```bash
-./run_hitl.sh bridge
+./run_hitl.sh gazebo [world]  # Gazebo only
+./run_hitl.sh bridge          # Bridge only (kills QGC first to grab serial port)
+./run_hitl.sh stop            # Kill all HITL processes
 ```
-You should see:
-```
-  -> first IMU message received!
-  -> receiving sensor data from Gazebo
-  [status] HIL sent: 1234  PX4 msgs: 5678  QGC: waiting
-```
-
-### Terminal 3 — QGroundControl
-Open QGC. It auto-connects via UDP 14550. Do NOT let QGC connect to the serial port directly — the bridge owns it.
-
-If QGC grabs the serial port: disconnect it in QGC > Application Settings > Comm Links.
 
 ### Arming & Flying
 - Wait ~15-20 seconds for PX4's EKF to converge
 - Arm via QGC slider or RC sticks (throttle down + yaw right)
 - Take off!
+
+### FPV Camera
+To view the onboard camera feed in Gazebo GUI:
+1. Click the plugin menu (vertical dots, top right)
+2. Search for **Image Display**
+3. Select topic: `/world/hitl/model/x500/link/fpv_cam_link/sensor/fpv_cam/image`
 
 ## Using a Real RC Controller
 
@@ -123,15 +125,10 @@ GPS velocity overflow when drone tumbles. Fixed with value clamping in the bridg
 ## Clean Restart Procedure
 
 ```bash
-# 1. Stop bridge (Ctrl+C)
-# 2. Kill Gazebo
-pkill -f "gz sim"
-# 3. Reboot Pixhawk (unplug USB, replug)
-# 4. Start Gazebo
-./run_hitl.sh gazebo
-# 5. Wait for drone to appear upright
-# 6. Start bridge
-./run_hitl.sh bridge
-# 7. Open QGC
-# 8. Wait 15-20s for EKF, then fly
+# 1. Stop everything
+./run_hitl.sh stop
+# 2. Reboot Pixhawk (unplug USB, replug)
+# 3. Start everything
+./run_hitl.sh start
+# 4. Wait 15-20s for EKF, then fly
 ```

@@ -54,14 +54,20 @@ python3 -m venv hitl_bridge_venv
 source hitl_bridge_venv/bin/activate
 pip install pymavlink pyserial
 
-# Terminal 1 - Start Gazebo
-./run_hitl.sh gazebo
+# Launch everything (Gazebo + bridge + QGC) in one command
+./run_hitl.sh start
 
-# Terminal 2 - Start bridge (after drone appears in Gazebo)
-./run_hitl.sh bridge
+# Or use the baylands world
+./run_hitl.sh start baylands
 
-# Terminal 3 - Open QGroundControl (connects automatically via UDP)
 # Wait ~15-20s for EKF to converge, then arm and fly
+```
+
+You can also run components separately:
+```bash
+./run_hitl.sh gazebo [world]  # Gazebo only
+./run_hitl.sh bridge          # Bridge only
+./run_hitl.sh stop            # Kill all HITL processes
 ```
 
 ## Using a Real RC Controller
@@ -72,13 +78,23 @@ pip install pymavlink pyserial
 4. Verify stick inputs in QGC > Vehicle Setup > Radio
 5. Fly with real sticks in the sim
 
+## FPV Camera
+
+The drone includes an onboard FPV camera. To view the feed in Gazebo:
+1. In the Gazebo GUI, click the plugin menu (vertical dots, top right)
+2. Search for **Image Display**
+3. Select the camera topic: `/world/hitl/model/x500/link/fpv_cam_link/sensor/fpv_cam/image`
+
 ## Files
 
 | File | Description |
 |------|-------------|
 | `hitl_bridge.py` | The bridge - Gazebo <-> Pixhawk MAVLink <-> QGC UDP |
-| `hitl_world.sdf` | Gazebo world with x500 quadcopter and sensors |
-| `run_hitl.sh` | Launcher script for Gazebo and bridge |
+| `hitl_world.sdf` | Gazebo world: flat ground (Zurich GPS origin) |
+| `hitl_baylands.sdf` | Gazebo world: Baylands Park, California |
+| `models/x500_hitl/` | x500 quadcopter with FPV camera for HITL |
+| `run_hitl.sh` | One-command launcher (Gazebo + bridge + QGC) |
+| `px4_hitl.params` | PX4 parameter backup for HITL configuration |
 | `diagnose_hitl.sh` | Pre-flight diagnostic checker |
 | `HITL_SETUP.md` | Detailed setup guide and troubleshooting |
 

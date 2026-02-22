@@ -14,8 +14,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PX4_DIR="$HOME/DEV/PX4-Autopilot"
 VENV_DIR="$SCRIPT_DIR/hitl_bridge_venv"
 
-# Gazebo needs to find PX4 models
-export GZ_SIM_RESOURCE_PATH="${PX4_DIR}/Tools/simulation/gz/models:${PX4_DIR}/Tools/simulation/gz/worlds:${GZ_SIM_RESOURCE_PATH:-}"
+# Gazebo needs to find local models first (x500_hitl), then PX4 models
+export GZ_SIM_RESOURCE_PATH="${SCRIPT_DIR}/models:${PX4_DIR}/Tools/simulation/gz/models:${PX4_DIR}/Tools/simulation/gz/worlds:${GZ_SIM_RESOURCE_PATH:-}"
 
 # Server config env var (adds Contact, AirSpeed, etc. on top of world SDF plugins)
 export GZ_SIM_SERVER_CONFIG_PATH="${PX4_DIR}/Tools/simulation/gz/server.config"

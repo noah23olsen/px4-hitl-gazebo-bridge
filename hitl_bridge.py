@@ -11,15 +11,23 @@ Data flow:
 """
 
 import sys
+import os
 import time
 import math
+import glob
 import socket
 import threading
 import signal
 import argparse
+from datetime import datetime
 
 # Add system site-packages for gz bindings (installed outside venv)
 sys.path.insert(0, "/usr/local/lib/python3.14/site-packages")
+
+
+def ts():
+    """Timestamp prefix for log messages."""
+    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
 from pymavlink import mavutil
 from gz.transport13 import Node
@@ -68,9 +76,8 @@ class HITLBridge:
         self.new_imu = False
         self.new_gps = False
 
-        # MAVLink serial connection
-        print(f"Connecting to Pixhawk on {serial_port} @ {baud_rate} ...")
-        self.mav = mavutil.mavlink_connection(serial_port, baud=baud_rate)
+        # MAVLink serial connection (retry until port is available)
+        self.mav = self._connect_serial(serial_port, baud_rate)
 
         # UDP socket for QGC forwarding
         self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -84,6 +91,35 @@ class HITLBridge:
         self.node = Node()
         self._setup_subscribers()
         self._setup_publisher()
+
+    @staticmethod
+    def _connect_serial(port, baud):
+        while True:
+            # Auto-detect port if the specified one doesn't exist
+            actual_port = port
+            if not os.path.exists(port):
+                candidates = glob.glob("/dev/tty.usbmodem*")
+                if candidates:
+                    actual_port = candidates[0]
+                    print(f"  {port} not found, using {actual_port}")
+                else:
+                    print(f"  Waiting for Pixhawk USB ...", end="\r")
+                    time.sleep(1)
+                    continue
+            try:
+                print(f"Connecting to Pixhawk on {actual_port} @ {baud} ...")
+                mav = mavutil.mavlink_connection(actual_port, baud=baud)
+                print(f"  Serial connected")
+                return mav
+            except Exception as e:
+                reason = str(e)
+                if "Resource busy" in reason:
+                    print(f"  Port busy, retrying in 2s ... (close QGC serial link)")
+                elif "No such file" in reason:
+                    print(f"  Port disappeared, retrying ...")
+                else:
+                    print(f"  Serial error: {reason}, retrying ...")
+                time.sleep(2)
 
     # ------------------------------------------------------------------ #
     #  gz-transport setup                                                 #
@@ -131,21 +167,30 @@ class HITLBridge:
     def _on_imu(self, msg):
         with self.lock:
             if self.imu_data is None:
-                print("  -> first IMU message received!")
+                print(f"  [{ts()}] -> first IMU message received!")
             self.sim_time_us = self._stamp_us(msg.header)
             self.imu_data = msg
             self.new_imu = True
 
     def _on_mag(self, msg):
         with self.lock:
+            if self.mag_data is None:
+                print(f"  [{ts()}] -> first MAG: x={msg.field_tesla.x:.6f} "
+                      f"y={msg.field_tesla.y:.6f} z={msg.field_tesla.z:.6f}")
             self.mag_data = msg
 
     def _on_baro(self, msg):
         with self.lock:
+            if self.baro_data is None:
+                print(f"  [{ts()}] -> first BARO: {msg.pressure:.1f} Pa "
+                      f"({msg.pressure * 0.01:.2f} hPa)")
             self.baro_data = msg
 
     def _on_gps(self, msg):
         with self.lock:
+            if self.gps_data is None:
+                print(f"  [{ts()}] -> first GPS: lat={msg.latitude_deg:.6f} "
+                      f"lon={msg.longitude_deg:.6f} alt={msg.altitude:.1f}")
             self.gps_data = msg
             self.new_gps = True
 
@@ -173,14 +218,13 @@ class HITLBridge:
             gz_v = -imu.angular_velocity.z
             fields |= SENSOR_GYRO
 
-            # Mag  FLU -> FRD
-            # NOTE: gz-sim Harmonic magnetometer reports Gauss despite
-            # the protobuf field being named "field_tesla" (gz-sim #2460)
+            # Mag  (x, -y, z) — gz-sim Harmonic mag z already points
+            # down (FRD convention), so do NOT negate it.
             mx = my = mz = 0.0
             if self.mag_data is not None:
                 mx = self.mag_data.field_tesla.x
                 my = -self.mag_data.field_tesla.y
-                mz = -self.mag_data.field_tesla.z
+                mz = self.mag_data.field_tesla.z
                 fields |= SENSOR_MAG
 
             # Baro  Pa -> hPa
@@ -192,6 +236,18 @@ class HITLBridge:
                     (1.0 - (abs_pressure / 1013.25) ** 0.190284) * 44330.0
                 )
                 fields |= SENSOR_BARO
+
+        # One-time dump of sensor values for debugging
+        if not hasattr(self, '_dumped'):
+            self._dumped = True
+            print(f"\n  === SENSOR DUMP (first HIL_SENSOR) ===")
+            print(f"  time_us:  {t_us}")
+            print(f"  accel:    ({ax:.4f}, {ay:.4f}, {az:.4f})  [expect ~(0, 0, -9.8)]")
+            print(f"  gyro:     ({gx:.4f}, {gy:.4f}, {gz_v:.4f})  [expect ~(0, 0, 0)]")
+            print(f"  mag:      ({mx:.6f}, {my:.6f}, {mz:.6f})")
+            print(f"  baro:     {abs_pressure:.2f} hPa  alt={pressure_alt:.2f} m")
+            print(f"  fields:   0x{fields:04x}")
+            print(f"  ========================================\n")
 
         self.mav.mav.hil_sensor_send(
             t_us,
@@ -228,7 +284,7 @@ class HITLBridge:
             t_us,
             3,       # fix_type  3-D
             lat, lon, alt,
-            20, 20,  # eph, epv  (cm)
+            20, 20,   # eph, epv  (cm)
             vel,
             vn, ve, vd,
             cog,
@@ -247,10 +303,19 @@ class HITLBridge:
     # ------------------------------------------------------------------ #
 
     def _handle_actuator_controls(self, msg):
+        if not hasattr(self, '_motor_count'):
+            self._motor_count = 0
+        self._motor_count += 1
         act = actuators_pb2.Actuators()
         for i in range(4):
             speed = max(0.0, msg.controls[i]) * MOTOR_SPEED_SCALE
             act.velocity.append(speed)
+        if self._motor_count == 1:
+            print(f"  [{ts()}] -> first MOTOR cmd: "
+                  f"[{msg.controls[0]:.3f}, {msg.controls[1]:.3f}, "
+                  f"{msg.controls[2]:.3f}, {msg.controls[3]:.3f}] "
+                  f"-> speeds [{act.velocity[0]:.0f}, {act.velocity[1]:.0f}, "
+                  f"{act.velocity[2]:.0f}, {act.velocity[3]:.0f}]")
         self.motor_pub.publish(act)
 
     # ------------------------------------------------------------------ #
@@ -285,7 +350,7 @@ class HITLBridge:
                 if mtype == "HIL_ACTUATOR_CONTROLS":
                     self._handle_actuator_controls(msg)
                 elif mtype == "STATUSTEXT":
-                    print(f"  PX4: {msg.text}")
+                    print(f"  [{ts()}] PX4: {msg.text}")
                 if mtype != "BAD_DATA":
                     self.px4_msg_count += 1
                     try:
@@ -299,7 +364,7 @@ class HITLBridge:
                     data, addr = self.udp_sock.recvfrom(4096)
                     if data:
                         if not self.qgc_seen:
-                            print("  -> QGroundControl connected")
+                            print(f"  [{ts()}] -> QGroundControl connected")
                             self.qgc_seen = True
                         self.mav.write(data)
                 except BlockingIOError:
@@ -314,7 +379,7 @@ class HITLBridge:
 
             if send_imu:
                 if not got_first_imu:
-                    print("  -> receiving sensor data from Gazebo")
+                    print(f"  [{ts()}] -> receiving sensor data from Gazebo")
                     got_first_imu = True
                 self._send_hil_sensor()
                 self.hil_sent_count += 1
@@ -324,9 +389,21 @@ class HITLBridge:
 
             # periodic status (every 5s)
             if got_first_imu and now - last_status >= 5.0:
-                print(f"  [status] HIL sent: {self.hil_sent_count}  "
-                      f"PX4 msgs: {self.px4_msg_count}  "
-                      f"QGC: {'connected' if self.qgc_seen else 'waiting'}")
+                sensors = []
+                with self.lock:
+                    if self.baro_data is None:
+                        sensors.append("NO BARO")
+                    if self.gps_data is None:
+                        sensors.append("NO GPS")
+                    if self.mag_data is None:
+                        sensors.append("NO MAG")
+                sensor_warn = f"  MISSING: {', '.join(sensors)}" if sensors else ""
+                motor_count = getattr(self, '_motor_count', 0)
+                print(f"  [{ts()}] HIL sent: {self.hil_sent_count}  "
+                      f"PX4: {self.px4_msg_count}  "
+                      f"motors: {motor_count}  "
+                      f"QGC: {'connected' if self.qgc_seen else 'waiting'}"
+                      f"{sensor_warn}")
                 last_status = now
 
             time.sleep(0.001)  # 1 kHz poll ceiling
